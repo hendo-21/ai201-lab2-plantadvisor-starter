@@ -70,7 +70,8 @@ likely match for clean user input. Aliases are the broadest net, so they go last
 *Aliases are stored as a list of strings. How will you check if the normalized input matches any alias in the list? Write your approach in pseudocode or plain English.*
 
 ```
-[your answer here]
+If normalized input does not match direct key or display name:
+    Check for a match in every item["aliases"] list for item in plans.json
 ```
 
 ---
@@ -79,8 +80,8 @@ likely match for clean user input. Aliases are the broadest net, so they go last
 
 *When a plant isn't found, the agent will read your message and use it to decide what to tell the user. Write the exact string you'll return — make it useful to the agent, not just to a human reading logs.*
 
-```
-[your answer here]
+```python
+"Stop your loop. Could not find the locate plant information on the user's input."
 ```
 
 ---
@@ -91,17 +92,17 @@ likely match for clean user input. Aliases are the broadest net, so they go last
 
 **Test: does `"devil's ivy"` return the pothos entry?**
 ```
-[yes / no — if no, describe what happened]
+yes
 ```
 
 **Test: does `"SNAKE PLANT"` return the snake plant entry?**
 ```
-[yes / no — if no, describe what happened]
+yes
 ```
 
 **One edge case you discovered while implementing:**
 ```
-[your answer here]
+When normalizing the string, it is insufficient to simply make display and alias names lower case, because the slug names use underscores instead of spaces. Thus, spaces in display names and aliases must be replaced with underscores in order to use equality matching to return the foud slug.
 ```
 
 ---

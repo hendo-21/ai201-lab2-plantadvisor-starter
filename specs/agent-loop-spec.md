@@ -122,7 +122,8 @@ for tool_call in assistant_message.tool_calls:
 *The loop should stop when: (a) the LLM returns a response with no tool calls, OR (b) the MAX_TOOL_ROUNDS limit is reached. Describe how you will detect each condition and what you will return in each case.*
 
 ```
-[your answer here]
+If the LLM responds with no tool calls and has a message, then it has its answer. Check for the presence of tool calls and return message if none.
+If MAX_TOOL_ROUNDS is reached, then the agent cannot find an answer with the provided tools. Stop the loop and return a message "LLM couldn't answer. Consider rephrasing or adding context."
 ```
 
 ---
@@ -132,7 +133,7 @@ for tool_call in assistant_message.tool_calls:
 *Once the loop exits because there are no more tool calls, how do you extract the text content from the response object? What field holds the string you should return?*
 
 ```
-[your answer here]
+response.choices[0].message.content
 ```
 
 ---
@@ -145,19 +146,19 @@ for tool_call in assistant_message.tool_calls:
 
 ```
 Query: "How should I care for my calathea?"
-Round 1 tool call: [tool name, args]
-Round 2 tool call: [tool name, args] (if any)
-Final response: [brief description]
+Round 1 tool call: lookup_plant({'plant_name': 'calathea'})
+Round 2 tool call: None, but it fetched `get_seasonal_conditions` tool, but did not call it.
+Final response: Water every 1-2 weeks, keep humidity around 50%, temp between 60-80F. Fertilize during the growing season and watch out for browning, yellowing, and dry edges.
 ```
 
 **What happens when you ask about a plant that isn't in the database?**
 
 ```
-[describe the behavior you observed]
+It states that it does not have information on watermelon plants, but then it raises the scientific name for some other outdoor fruiting plant. It then provides generic watering information that I see repeated when trying different plants not in the db.
 ```
 
 **One thing about the tool call API that surprised you:**
 
 ```
-[your answer here]
+I got a 400 Bad Request Error because the tool call that the LLM returned included XML tags (<function>). After asking my AI chat about the issue I learned that this is a well known quirk of Groq, and that it can sometimes return raw XML tags like this. I also learned that this error is non-deterministic, so I added a try/except block to retry the API call if the error was received (capping at 3 retries).
 ```

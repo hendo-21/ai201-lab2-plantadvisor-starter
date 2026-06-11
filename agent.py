@@ -1,5 +1,5 @@
 import json
-from groq import Groq
+from groq import Groq, BadRequestError
 from config import GROQ_API_KEY, LLM_MODEL, MAX_TOOL_ROUNDS
 from tools import lookup_plant, get_seasonal_conditions
 
@@ -86,10 +86,11 @@ SYSTEM_PROMPT = (
 def dispatch_tool(tool_name: str, tool_args: dict) -> str:
     """Route a tool call to the correct function and return the result as a JSON string."""
     print(f"  → Tool call: {tool_name}({tool_args})")
+
     if tool_name == "lookup_plant":
         result = lookup_plant(tool_args["plant_name"])
     elif tool_name == "get_seasonal_conditions":
-        result = get_seasonal_conditions(tool_args.get("season"))
+            result = get_seasonal_conditions(tool_args.get("season")) if tool_args else get_seasonal_conditions()
     else:
         result = {"error": f"Unknown tool: {tool_name}"}
     print(f"  ← Result: {json.dumps(result)[:120]}{'...' if len(json.dumps(result)) > 120 else ''}")
@@ -103,29 +104,52 @@ def dispatch_tool(tool_name: str, tool_args: dict) -> str:
 def run_agent(user_message: str, history: list) -> str:
     """
     Run the plant care agent for one user turn and return its response.
-
-    TODO — Milestone 2:
-
-    The agent loop follows a specific pattern that you'll implement here. Read
-    specs/agent-loop-spec.md carefully before writing any code — understand the
-    full loop before implementing any part of it.
-
-    The loop works like this:
-      1. Build a messages list: system prompt + conversation history + new user message
-      2. Call the LLM with messages and TOOL_DEFINITIONS
-      3. If the response contains tool_calls:
-           a. Append the assistant message (with tool_calls) to messages
-           b. For each tool call: execute via dispatch_tool(), append the result
-           c. Call the LLM again with the updated messages
-           d. Repeat until no more tool_calls (or MAX_TOOL_ROUNDS is reached)
-      4. Return the final text response
-
-    Key details to get right:
-      - The assistant message must be appended BEFORE tool results
-      - Tool result messages use role="tool" with a tool_call_id field
-      - Append the assistant's message object directly (not just its content)
-      - The history format from Gradio: list of [user_message, assistant_message] pairs
-
-    Before writing code, complete specs/agent-loop-spec.md.
     """
-    return "🌱 Agent not yet implemented. Complete Milestone 2 to activate the Plant Advisor."
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+
+    for msg in history:
+        messages.append({"role": msg["role"], "content": msg["content"]})
+
+    messages.append({"role": "user", "content": user_message})
+
+    for _ in range(MAX_TOOL_ROUNDS):
+        for attempt in range(3):
+            try:
+                response = _client.chat.completions.create(
+                    model=LLM_MODEL,
+                    messages=messages,  # type: ignore[arg-type]
+                    tools=TOOL_DEFINITIONS,  # type: ignore[arg-type]
+                    tool_choice="auto",
+                )
+                break
+            except BadRequestError as e:
+                is_tool_use_failed = (
+                    isinstance(e.body, dict)
+                    and e.body.get("error", {}).get("code") == "tool_use_failed"
+                )
+                if is_tool_use_failed and attempt < 2:
+                    continue
+                raise
+        else:
+            return "I wasn't able to generate a valid tool call after several attempts. Please try rephrasing."
+
+        assistant_message = response.choices[0].message
+
+        # Anwer found / no relevant tools so return message content
+        if not assistant_message.tool_calls:
+            return assistant_message.content or ""
+
+        messages.append(assistant_message)  # type: ignore
+
+        for tool_call in assistant_message.tool_calls:
+            tool_name = tool_call.function.name
+            tool_args = json.loads(tool_call.function.arguments)
+            tool_result = dispatch_tool(tool_name, tool_args)
+
+            messages.append({
+                "role": "tool",
+                "tool_call_id": tool_call.id,
+                "content": tool_result,
+            })
+
+    return "I wasn't able to find an answer with the available tools. Consider rephrasing or adding more context."
